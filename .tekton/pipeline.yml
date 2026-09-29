@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: ci-cd-pipeline
+spec:
+  workspaces:
+    - name: output
+  params:
+    - name: git-url
+      description: The git repository URL to clone from
+      type: string
+    - name: git-revision
+      description: The git revision to use
+      type: string
+      default: main
+    - name: image-name
+      description: The fully qualified image name
+      type: string
+      default: image-registry.openshift-image-registry.svc:5000/sn-labs-jeanbenissea/ci-cd-final-project:latest
+
+  tasks:
+    - name: cleanup
+      taskRef:
+        name: cleanup
+      workspaces:
+        - name: source
+          workspace: output
+
+    - name: git-clone
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+      workspaces:
+        - name: output
+          workspace: output
+      runAfter:
+        - cleanup
+
+    - name: flake8
+      taskRef:
+        name: flake8
+      workspaces:
+        - name: source
+          workspace: output
+      runAfter:
+        - git-clone
+
+    - name: nose
+      taskRef:
+        name: nose
+      workspaces:
+        - name: source
+          workspace: output
+      runAfter:
+        - flake8
+
+    - name: buildah
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: $(params.image-name)
+      workspaces:
+        - name: source
+          workspace: output
+      runAfter:
+        - nose
